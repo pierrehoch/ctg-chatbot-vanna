@@ -23,7 +23,7 @@ st.sidebar.checkbox("Show Summary", value=True, key="show_summary")
 st.sidebar.checkbox("Show Follow-up Questions", value=True, key="show_followup")
 st.sidebar.button("Reset", on_click=lambda: set_question(None), use_container_width=True)
 
-st.title("Elevio SQL Assistant - Test")
+st.title("Elevio SQL Assistant")
 # st.sidebar.write(st.session_state)
 
 
@@ -86,11 +86,8 @@ if my_question:
                     "assistant",
                     avatar="🤖",
                 )
-                if len(df) > 10:
-                    assistant_message_table.text("First 10 rows of data")
-                    assistant_message_table.dataframe(df.head(10))
-                else:
-                    assistant_message_table.dataframe(df)
+                
+                assistant_message_table.dataframe(df)
 
             if False & should_generate_chart_cached(question=my_question, sql=sql, df=df):
 

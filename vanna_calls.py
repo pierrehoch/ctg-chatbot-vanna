@@ -26,7 +26,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             self, 
             config={
                 'api_key': st.secrets.get("OPENAI_API_KEY"),
-                'model': 'gpt-4',  # Use the smaller model
+                'model': 'gpt-4o-mini',  # Use the smaller model
                 'chunk_size': 500,  # Use smaller chunks
                 'chunk_overlap': 50  # Use less overlap
             }
@@ -246,42 +246,70 @@ def setup_vanna():
             drug_description TEXT
         """)
         
-        # Get the current date and format it in a more clear and explicit way
-        today = dt_date.today()
-        date_str = today.isoformat()
-        day_name = today.strftime("%A")
-        month_name = today.strftime("%B")
-        full_date_str = f"{day_name}, {month_name} {today.day}, {today.year}"
+      
+        # Time-based queries and best practices
+        vn.train(documentation="""
+        TIME-BASED QUERY EXAMPLES AND BEST PRACTICES:
+        ---------------------------------------------
         
-        # Calculate important reference dates
-        one_year_ago = today - timedelta(days=365)
-        one_month_ago = today - timedelta(days=30)
-        one_week_ago = today - timedelta(days=7)
-
-        vn.train(documentation=f"""
-             TIME REFERENCE INFORMATION:
-             ---------------------------
-             The current date is {full_date_str} (ISO format: {date_str}).
-             Today's date: {today}
-             One year ago: {one_year_ago}
-             One month ago: {one_month_ago}
-             One week ago: {one_week_ago}
-             Current year: {today.year}
-             
-             When responding to time-based queries, always use these dates as reference points:
-             - "today", "current", or "now" refers to {today}
-             - "last year" or "past year" means from {one_year_ago} to {today}
-             - "last month" means from {one_month_ago} to {today}
-             - "last week" means from {one_week_ago} to {today}
-             
-             For example:
-             - For the query "trials that started in the last year", return trials where start_date is BETWEEN '{one_year_ago}' AND '{today}'
-             - For the query "recent trials", return trials where start_date >= '{one_year_ago}'
-             - For "trials from 2023", return trials where start_date BETWEEN '2023-01-01' AND '2023-12-31'
-             
-             The following is the schema for the clinical_trials table.
-             Important : every query on a string field should be case-insensitive.
-             """)
+        - To find the soonest upcoming trials (trials starting after today, ordered by start date):
+        
+          SQL: 
+          SELECT * FROM clinical_trials 
+          WHERE start_date >= '{today}' 
+          ORDER BY start_date ASC 
+          LIMIT 10
+        
+        - To find trials that are currently recruiting and will start soon:
+        
+          SQL:
+          SELECT * FROM clinical_trials 
+          WHERE overall_status = 'RECRUITING' 
+            AND start_date >= '{today}' 
+          ORDER BY start_date ASC 
+          LIMIT 10
+        
+        - To find trials that are about to complete soon:
+        
+          SQL:
+          SELECT * FROM clinical_trials 
+          WHERE completion_date >= '{today}' 
+          ORDER BY completion_date ASC 
+          LIMIT 10
+        
+        - To find trials that started in the past month:
+        
+          SQL:
+          SELECT * FROM clinical_trials 
+          WHERE start_date >= '{one_month_ago}' 
+            AND start_date < '{today}'
+        
+        - To find trials that are ongoing as of today:
+        
+          SQL:
+          SELECT * FROM clinical_trials 
+          WHERE start_date <= '{today}' 
+            AND (completion_date IS NULL OR completion_date >= '{today}')
+        
+        - Always use the date provided in the question (e.g., "as of 2025-06-23") as the reference for 'today'.
+        - Use ORDER BY with ASC for soonest/upcoming, DESC for most recent/past.
+        - Use LIMIT to restrict the number of results for summary or list questions.
+        
+        Replace {today} with the current date (provided in the prompt).
+        Replace {one_month_ago} with the date one month before today.
+        
+        EXAMPLES:
+        ---------
+        Question: "What are the soonest upcoming trials?"
+        SQL: SELECT * FROM clinical_trials WHERE start_date >= '{today}' ORDER BY start_date ASC LIMIT 10
+        
+        Question: "Which trials are about to complete?"
+        SQL: SELECT * FROM clinical_trials WHERE completion_date >= '{today}' ORDER BY completion_date ASC LIMIT 10
+        
+        Question: "Show me the most recently started trials"
+        SQL: SELECT * FROM clinical_trials WHERE start_date <= '{today}' ORDER BY start_date DESC LIMIT 10
+        """)
+        
 
                 # Update the phases documentation with proper JSONB querying examples
         vn.train(documentation="""
@@ -714,6 +742,35 @@ def setup_vanna():
 
     Usage: Provides additional information about the drug being studied.
         """)
+
+        # Add training for relevant column selection and ordering
+        vn.train(documentation="""
+        COLUMN SELECTION AND ORDERING BEST PRACTICES:
+        ---------------------------------------------
+        - Never use SELECT * in queries. Always select only the relevant columns for the user's question.
+        - Place the most important columns first, in an order that is most useful for the user.
+        - For general trial queries, prefer this column order:
+            nct_id, brief_title, conditions, drug_name, phases, start_date, completion_date, overall_status, enrollment_count
+        - For queries about drugs, use: drug_name, drug_description, nct_id, brief_title, overall_status, start_date, completion_date
+        - For queries about sponsors/collaborators, use: lead_sponsor_name, collaborators, nct_id, brief_title, overall_status, start_date
+        - For queries about eligibility, use: nct_id, brief_title, eligibility_criteria, minimum_age, maximum_age, sex, gender_description
+        - For queries about study population, use: nct_id, brief_title, study_population, std_ages, enrollment_count
+        - Always omit columns that are not relevant to the user's question.
+        - If unsure, default to the general trial column order above.
+        - Example: To show upcoming trials, use:
+          SELECT nct_id, brief_title, conditions, drug_name, phases, start_date, completion_date, overall_status, enrollment_count
+          FROM clinical_trials
+          WHERE start_date >= '{today}'
+          ORDER BY start_date ASC
+          LIMIT 10
+        - Example: For phase 2 diabetes trials:
+          SELECT nct_id, brief_title, phases, conditions, start_date, completion_date, drug_name
+          FROM clinical_trials
+          WHERE phases @> '["PHASE2"]' AND LOWER(conditions::text) LIKE '%diabetes%'
+          ORDER BY start_date ASC
+        - Never include large text fields (like detailed_description) unless specifically requested.
+        """)
+
     else:
         st.write("Using previously trained model...")
         
@@ -738,22 +795,6 @@ def setup_vanna():
       
     return vn
 
-def update_time_reference(vn):
-    """Update the time reference in the model to ensure it knows the current date"""
-    today = dt_date.today()
-    one_year_ago = today - timedelta(days=365)
-    
-    vn.train(documentation=f"""
-    IMPORTANT TIME REFERENCE UPDATE:
-    Today's date: {today}
-    One year ago: {one_year_ago}
-    
-    For time-based queries:
-    - "today" or "current" refers to {today}
-    - "last year" or "past year" means from {one_year_ago} to {today}
-    - For the query "trials that started in the last year", return trials where start_date is BETWEEN '{one_year_ago}' AND '{today}'
-    """)
-
 @st.cache_data(show_spinner="Generating sample questions ...")
 def generate_questions_cached():
     vn = setup_vanna()
@@ -763,12 +804,15 @@ def generate_questions_cached():
 @st.cache_data(show_spinner="Generating SQL query ...", ttl=3600)
 def generate_sql_cached(question: str):
     vn = setup_vanna()
+
+
+    # Get the current date and format it in a more clear and explicit way
+    today = dt_date.today()
+    date_str = today.isoformat()
+
+    print(f"Generating SQL for question: {question} (as of {date_str})")
     
-    # For time-based queries, explicitly refresh the time reference
-    time_keywords = ["last year", "recent", "past month", "past week", "current", "today", "now"]
-    if any(keyword in question.lower() for keyword in time_keywords):
-        update_time_reference(vn)
-    
+    question = f"{question} (as of {date_str})"
     return vn.generate_sql(question=question, allow_llm_to_see_data=True)
 
 @st.cache_data(show_spinner="Checking for valid SQL ...")
