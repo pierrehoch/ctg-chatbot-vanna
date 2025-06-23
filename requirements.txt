@@ -1,0 +1,11 @@
+vanna #[chromadb,openai]
+streamlit
+python-dotenv
+chromadb
+openai
+vanna[postgres]
+psycopg[binary]
+# psycopg2-binary
+# pandas
+# requests
+# datetime
