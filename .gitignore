@@ -166,3 +166,4 @@ cython_debug/
 
 .streamlit/secrets.toml
 uv.lock
+load_to_supabase.py
