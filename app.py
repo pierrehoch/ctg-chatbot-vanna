@@ -12,19 +12,48 @@ from vanna_calls import (
     generate_summary_cached
 )
 
-st.set_page_config(layout="wide")
-
+st.set_page_config(initial_sidebar_state="collapsed", page_title="Elevio CTG Assistant", page_icon=":robot_face:", layout="wide")
 st.sidebar.title("Output Settings")
 st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
 st.sidebar.checkbox("Show Table", value=True, key="show_table")
-st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
-st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
-st.sidebar.checkbox("Show Summary", value=True, key="show_summary")
-st.sidebar.checkbox("Show Follow-up Questions", value=True, key="show_followup")
-st.sidebar.button("Reset", on_click=lambda: set_question(None), use_container_width=True)
+# st.sidebar.checkbox("Show Plotly Code", value=True, key="show_plotly_code")
+# st.sidebar.checkbox("Show Chart", value=True, key="show_chart")
+st.sidebar.checkbox("Show Summary", value=False, key="show_summary")
+# st.sidebar.checkbox("Show Follow-up Questions", value=True, key="show_followup")
 
-st.title("Elevio SQL Assistant")
+# Add column selection widget
+st.sidebar.title("Column Selection")
+st.sidebar.write("Specific columns to add to the answers:")
+
+# Define all available columns
+all_columns = [
+    "nct_id", "brief_title", "official_title", "overall_status",
+    "start_date", "start_date_type", "primary_completion_date", "primary_completion_date_type",
+    "completion_date", "completion_date_type", "study_first_submit_date",
+    "last_update_date", "last_update_date_type", "lead_sponsor_name",
+    "lead_sponsor_class", "collaborators", "brief_summary", "detailed_description",
+    "conditions", "study_type", "phases", "allocation", "enrollment_count",
+    "eligibility_criteria", "healthy_volunteers", "gender_based", "gender_description",
+    "sex", "minimum_age", "maximum_age", "std_ages", "study_population",
+    "sampling_method", "study_references", "see_also_links", "avail_ipds",
+    "drug_name", "drug_description"
+]
+
+# Default selected columns (most commonly useful)
+default_columns = []
+
+# Create checkboxes for each column
+with st.sidebar.container():
+    selected_columns = []
+    for column in all_columns:
+        is_default = column in default_columns
+        if st.checkbox(column, value=is_default, key=f"col_{column}"):
+            selected_columns.append(column)
+
+
+st.title("Elevio CTG Assistant")
 # st.sidebar.write(st.session_state)
+st.button("New Question", on_click=lambda: set_question(None),)
 
 
 def set_question(question):
@@ -58,7 +87,8 @@ if my_question:
     user_message = st.chat_message("user")
     user_message.write(f"{my_question}")
 
-    sql = generate_sql_cached(question=my_question)
+    # Pass selected columns to SQL generation
+    sql = generate_sql_cached(question=my_question, selected_columns=selected_columns)
 
     if sql:
         if is_sql_valid_cached(sql=sql):
@@ -114,7 +144,7 @@ if my_question:
                         else:
                             assistant_message_chart.error("I couldn't generate a chart")
 
-            if False & st.session_state.get("show_summary", True):
+            if st.session_state.get("show_summary", True):
                 assistant_message_summary = st.chat_message(
                     "assistant",
                     avatar="🤖",

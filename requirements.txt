@@ -1,10 +1,21 @@
-vanna #[chromadb,openai]
 streamlit
-python-dotenv
-chromadb
-openai
-vanna[postgres]
+vanna[openai,chromadb,postgres]
 psycopg[binary]
+python-dotenv
+openai
+chromadb
+pandas
+
+
+# vanna #[chromadb,openai]
+# streamlit
+# python-dotenv
+# chromadb
+# openai
+# vanna[postgres]
+# psycopg[binary]
+
+
 # psycopg2-binary
 # pandas
 # requests

@@ -40,7 +40,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
         except:
             return False
 
-def preprocess_dataframe(df, max_rows=10, max_cols=10, max_text_length=100):
+def preprocess_dataframe(df, max_rows=10, max_cols=10, max_text_length=500):
     """
     Preprocesses a dataframe to reduce its size before sending to API.
     
@@ -771,11 +771,30 @@ def setup_vanna():
         - Never include large text fields (like detailed_description) unless specifically requested.
         """)
 
+        # Add training for user-selected columns
+        # vn.train(documentation="""
+        # USER COLUMN SELECTION HANDLING:
+        # ------------------------------
+        # When user-selected columns are provided, ALWAYS include them in the SELECT statement.
+        
+        # Rules for column selection:
+        # 1. If user has selected specific columns, include ALL of them in the SELECT statement
+        # 2. Add other relevant columns based on the question, but user-selected columns take priority
+        # 3. Always include user-selected columns even if they seem irrelevant to the question
+        # 4. Order columns with user-selected ones first, then add other relevant columns
+        # 5. Never exclude user-selected columns from the query
+        
+        # Example:
+        # - User selected columns: ["nct_id", "drug_name", "enrollment_count"]
+        # - Question: "Show me diabetes trials"
+        # - SQL should start with: SELECT nct_id, drug_name, enrollment_count, conditions, ...
+        
+        # The user-selected columns should ALWAYS appear in the SELECT clause regardless of the question.
+        # """)
+
     else:
         st.write("Using previously trained model...")
         
-        # Even for a previously trained model, let's update the time reference
-        update_time_reference(vn)
     
     # Always ensure connection is active
     db_host = st.secrets.get("POSTGRES_HOST", "localhost")
@@ -802,9 +821,8 @@ def generate_questions_cached():
 
 
 @st.cache_data(show_spinner="Generating SQL query ...", ttl=3600)
-def generate_sql_cached(question: str):
+def generate_sql_cached(question: str, selected_columns=None):
     vn = setup_vanna()
-
 
     # Get the current date and format it in a more clear and explicit way
     today = dt_date.today()
@@ -812,8 +830,14 @@ def generate_sql_cached(question: str):
 
     print(f"Generating SQL for question: {question} (as of {date_str})")
     
-    question = f"{question} (as of {date_str})"
-    return vn.generate_sql(question=question, allow_llm_to_see_data=True)
+    # Enhance the question with date context and column requirements
+    enhanced_question = f"{question} (as of {date_str})"
+    
+    if selected_columns and len(selected_columns) > 0:
+        columns_str = ", ".join(selected_columns)
+        enhanced_question += f"\n\In addition to what columns you judge to be relevant for answering the question, add those: {columns_str}."
+    
+    return vn.generate_sql(question=enhanced_question, allow_llm_to_see_data=True)
 
 @st.cache_data(show_spinner="Checking for valid SQL ...")
 def is_sql_valid_cached(sql: str):
@@ -860,8 +884,8 @@ def generate_followup_cached(question, sql, df):
 def generate_summary_cached(question, df):
     vn = setup_vanna()
     
-    # Use the preprocessing function
-    sample_df = preprocess_dataframe(df, max_rows=5, max_cols=8)
+    # Use the preprocessing function but without column limit for summary
+    sample_df = preprocess_dataframe(df, max_rows=10, max_cols=len(df.columns))
     
     try:
         return vn.generate_summary(question=question, df=sample_df)
@@ -869,9 +893,10 @@ def generate_summary_cached(question, df):
         st.warning(f"Could not generate summary: {str(e)}")
         # Fallback to an even simpler approach if needed
         if "too large" in str(e).lower() or "rate limit" in str(e).lower():
-            minimal_df = sample_df.head(3)[sample_df.columns[:3]]
+            minimal_df = sample_df.head(3)
             try:
                 return vn.generate_summary(question=question, df=minimal_df)
             except:
                 return "Summary generation failed due to API limitations. Try a more specific question with a smaller result set."
+
 
