@@ -141,12 +141,12 @@ def setup_vanna():
                 'client_encoding': 'utf8'
             }
             
-            print(f"Trying direct psycopg2 connection...")
+            # print(f"Trying direct psycopg2 connection...")
             
-            # Test connection with psycopg2 directly
-            test_conn = psycopg2.connect(**conn_params)
-            test_conn.close()
-            print("Direct psycopg2 connection successful!")
+            # # Test connection with psycopg2 directly
+            # test_conn = psycopg2.connect(**conn_params)
+            # test_conn.close()
+            # print("Direct psycopg2 connection successful!")
             
             # Now try vanna's connection without sslmode first
             print("Trying vanna connection without sslmode...")
