@@ -1,21 +1,21 @@
-# streamlit
-# vanna[openai,chromadb,postgres]
-# psycopg[binary]
-# python-dotenv
-# openai
-# chromadb
-# pandas
-# pysqlite3-binary
-# protobuf==3.20.3
-
-
-vanna #[chromadb,openai]
 streamlit
-python-dotenv
-chromadb
-openai
-vanna[postgres]
+vanna
 psycopg[binary]
+python-dotenv
+openai
+chromadb
+pandas
+# pysqlite3-binary
+protobuf==3.20.3
+
+
+# vanna #[chromadb,openai]
+# streamlit
+# python-dotenv
+# chromadb
+# openai
+# vanna[postgres]
+# psycopg[binary]
 
 
 # psycopg2-binary
