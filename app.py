@@ -7,7 +7,7 @@ except ImportError:
 
 import time
 import streamlit as st
-from vanna_calls import (
+from src.vanna_calls import (
     generate_questions_cached,
     generate_sql_cached,
     run_sql_cached,
