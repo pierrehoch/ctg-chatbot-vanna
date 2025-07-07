@@ -164,6 +164,11 @@ cython_debug/
 
 .DS_Store
 
-.streamlit/secrets.toml
 uv.lock
+
+secrets.toml
+
 load_to_supabase.py
+
+tests/
+src/database/

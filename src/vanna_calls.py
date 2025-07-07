@@ -6,6 +6,7 @@ from vanna.openai import OpenAI_Chat
 from datetime import date as dt_date, timedelta
 import pandas as pd
 import numpy as np
+from src.utils.get_embedding import get_openai_embedding
 
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
@@ -207,6 +208,7 @@ def setup_vanna():
         CREATE TABLE clinical_trials (
             id SERIAL PRIMARY KEY,
             nct_id TEXT UNIQUE,
+            org_study_id TEXT,
             brief_title TEXT,
             official_title TEXT,
             overall_status TEXT,
@@ -231,6 +233,7 @@ def setup_vanna():
             allocation TEXT,
             enrollment_count FLOAT,
             eligibility_criteria TEXT,
+            eligibility_criteria_embedding VECTOR(1536),
             gender_based BOOLEAN,
             gender_description TEXT,
             sex TEXT,
@@ -385,8 +388,17 @@ def setup_vanna():
         Example: NCT12345678
 
         Usage: Used to reference and link to the trial on the ClinicalTrials.gov website.
+        
+        3. org_study_id
+        Type: TEXT
+        
+        Description: The organization's internal study identifier.
+        
+        Example: "ABC-123-XYZ"
+        
+        Usage: Used to reference the study within the sponsoring organization.
 
-        3. brief_title
+        4. brief_title
         Type: TEXT
 
         Description: A short, descriptive title for the clinical trial.
@@ -395,7 +407,7 @@ def setup_vanna():
 
         Usage: Provides a quick reference for the trial's purpose.
 
-        4. official_title
+        5. official_title
         Type: TEXT
 
         Description: The formal, official title of the clinical trial.
@@ -404,7 +416,7 @@ def setup_vanna():
 
         Usage: Used in official documentation and regulatory submissions.
 
-        5. overall_status
+        6. overall_status
         Type: TEXT
 
         Description: The current status of the clinical trial (e.g., "RECRUITING", "COMPLETED", "NOT_YET_RECRUITING", "UNKNOWN", "WITHDRAWN", "TERMINATED").
@@ -413,7 +425,7 @@ def setup_vanna():
 
         Usage: Indicates the trial's current phase or stage.
 
-        6. start_date
+        7. start_date
         Type: DATE
 
         Description: The date when the trial started.
@@ -422,7 +434,7 @@ def setup_vanna():
 
         Usage: Provides timeline information for the trial.
 
-        7. start_date_type
+        8. start_date_type
         Type: TEXT
 
         Description: The type of start date (e.g., "Actual", "Anticipated").
@@ -431,7 +443,7 @@ def setup_vanna():
 
         Usage: Clarifies whether the date is confirmed or estimated.
 
-        8. primary_completion_date
+        9. primary_completion_date
         Type: DATE
 
         Description: The date when the primary outcome measure is assessed.
@@ -440,7 +452,7 @@ def setup_vanna():
 
         Usage: Marks a key milestone in the trial timeline.
 
-        9. primary_completion_date_type
+        10. primary_completion_date_type
         Type: TEXT
 
         Description: The type of primary completion date (e.g., "Actual", "Anticipated").
@@ -449,7 +461,7 @@ def setup_vanna():
 
         Usage: Clarifies whether the date is confirmed or estimated.
 
-        10. completion_date
+        11. completion_date
         Type: DATE
 
         Description: The date when the trial is completed.
@@ -461,7 +473,7 @@ def setup_vanna():
 
         # Chunk 2: Fields 11-20
         vn.train(documentation="""
-    11. completion_date_type
+    12. completion_date_type
     Type: TEXT
 
     Description: The type of completion date (e.g., "Actual", "Anticipated").
@@ -470,7 +482,7 @@ def setup_vanna():
 
     Usage: Clarifies whether the date is confirmed or estimated.
 
-    12. study_first_submit_date
+    13. study_first_submit_date
     Type: DATE
 
     Description: The date when the trial was first submitted to ClinicalTrials.gov.
@@ -479,7 +491,7 @@ def setup_vanna():
 
     Usage: Tracks the submission timeline.
 
-    13. last_update_date
+    14. last_update_date
     Type: DATE
 
     Description: The date when the trial record was last updated.
@@ -488,7 +500,7 @@ def setup_vanna():
 
     Usage: Indicates the most recent update to the trial information.
 
-    14. last_update_date_type
+    15. last_update_date_type
     Type: TEXT
 
     Description: The type of last update date (e.g., "Actual", "Anticipated").
@@ -497,7 +509,7 @@ def setup_vanna():
 
     Usage: Clarifies whether the date is confirmed or estimated.
 
-    15. lead_sponsor_name
+    16. lead_sponsor_name
     Type: TEXT
 
     Description: The name of the primary sponsor of the clinical trial.
@@ -506,7 +518,7 @@ def setup_vanna():
 
     Usage: Identifies the main organization responsible for the trial.
 
-    16. lead_sponsor_class
+    17. lead_sponsor_class
     Type: TEXT
 
     Description: The classification of the lead sponsor (e.g., "NIH", "Industry", "Other").
@@ -515,7 +527,7 @@ def setup_vanna():
 
     Usage: Categorizes the sponsor for analysis and reporting.
 
-    17. collaborators
+    18. collaborators 
     Type: JSONB
 
     Description: A JSON array or object listing organizations collaborating on the trial.
@@ -538,7 +550,7 @@ def setup_vanna():
 
     Usage: Tracks additional organizations involved in the trial.
 
-    18. brief_summary
+    19. brief_summary
     Type: TEXT
 
     Description: A concise summary of the trial's purpose and objectives.
@@ -547,7 +559,7 @@ def setup_vanna():
 
     Usage: Provides a quick overview of the trial.
 
-    19. detailed_description
+    20. detailed_description
     Type: TEXT
 
     Description: A detailed description of the trial, including background, objectives, and methodology.
@@ -556,7 +568,7 @@ def setup_vanna():
 
     Usage: Offers in-depth information about the trial.
 
-    20. conditions
+    21. conditions
     Type: JSONB
 
     Description: A JSON array or object listing the medical conditions or diseases being studied.
@@ -568,7 +580,7 @@ def setup_vanna():
 
         # Chunk 3: Fields 21-30
         vn.train(documentation="""
-    21. study_type
+    22. study_type
     Type: TEXT
 
     Description: The type of study (e.g., "Interventional", "Observational").
@@ -577,7 +589,7 @@ def setup_vanna():
 
     Usage: Categorizes the trial for analysis.
 
-    22. healthy_volunteers
+    23. healthy_volunteers
     Type: BOOLEAN
 
     Description: Indicates whether healthy volunteers are accepted.
@@ -586,7 +598,7 @@ def setup_vanna():
 
     Usage: Specifies eligibility criteria.
 
-    23. phases
+    24. phases
     Type: JSONB
 
     Description: A JSON array or object listing the clinical trial phases (e.g., "PHASE2", "PHASE1").
@@ -595,7 +607,7 @@ def setup_vanna():
 
     Usage: Indicates the trial's phase(s).
 
-    24. allocation
+    25. allocation
     Type: TEXT
 
     Description: The method of participant allocation (e.g., "RANDOMIZED", "NON_RANDOMIZED").
@@ -604,7 +616,7 @@ def setup_vanna():
 
     Usage: Describes the trial design.
 
-    25. enrollment_count
+    26. enrollment_count
     Type: FLOAT
 
     Description: The number of participants planned or enrolled.
@@ -613,7 +625,7 @@ def setup_vanna():
 
     Usage: Provides the planned or actual sample size.
 
-    26. eligibility_criteria
+    27. eligibility_criteria
     Type: TEXT
 
     Description: The criteria participants must meet to be eligible for the trial.
@@ -622,7 +634,7 @@ def setup_vanna():
 
     Usage: Specifies participant requirements.
 
-    27. gender_based
+    28. gender_based
     Type: BOOLEAN
 
     Description: Indicates whether the trial is gender-based.
@@ -631,7 +643,7 @@ def setup_vanna():
 
     Usage: Specifies if gender is a criterion.
 
-    28. gender_description
+    29. gender_description
     Type: TEXT
 
     Description: A description of the gender criteria.
@@ -640,7 +652,7 @@ def setup_vanna():
 
     Usage: Clarifies gender requirements.
 
-    29. sex
+    30. sex
     Type: TEXT
 
     Description: The sex of participants (e.g., "ALL", "MALE", "FEMALE").
@@ -649,7 +661,7 @@ def setup_vanna():
 
     Usage: Specifies participant sex.
 
-    30. minimum_age
+    31. minimum_age
     Type: FLOAT
 
     Description: The minimum age of participants (in years) (e.g., 18, NULL).
@@ -661,7 +673,7 @@ def setup_vanna():
 
         # Chunk 4: Fields 31-38
         vn.train(documentation="""
-    31. maximum_age
+    32. maximum_age
     Type: FLOAT
 
     Description: The maximum age of participants (in years) (e.g., 85, NULL).
@@ -670,7 +682,7 @@ def setup_vanna():
 
     Usage: Specifies age requirements.
 
-    32. std_ages
+    33. std_ages
     Type: JSONB
 
     Description: A JSON array or object listing standard age groups (e.g., "Adult", "Child").
@@ -679,7 +691,7 @@ def setup_vanna():
 
     Usage: Categorizes participants by age group.
 
-    33. study_population
+    34. study_population
     Type: TEXT
 
     Description: A description of the study population.
@@ -688,7 +700,7 @@ def setup_vanna():
 
     Usage: Describes the target population.
 
-    34. sampling_method
+    35. sampling_method
     Type: TEXT
 
     Description: The method used to select participants.
@@ -697,7 +709,7 @@ def setup_vanna():
 
     Usage: Describes the sampling strategy.
 
-    35. study_references
+    36. study_references
     Type: JSONB
 
     Description: A JSON array or object listing references or citations related to the trial.
@@ -706,7 +718,7 @@ def setup_vanna():
 
     Usage: Provides related literature.
 
-    36. see_also_links
+    37. see_also_links
     Type: JSONB
 
     Description: A JSON array or object listing related links or resources.
@@ -715,7 +727,7 @@ def setup_vanna():
 
     Usage: Offers additional resources.
 
-    37. avail_ipds
+    38. avail_ipds
     Type: JSONB
 
     Description: A JSON array or object indicating the availability of Individual Participant Data (IPD).
@@ -724,7 +736,7 @@ def setup_vanna():
 
     Usage: Specifies data sharing policies.
 
-    38. drug_name
+    39. drug_name
     Type: TEXT
 
     Description: The name of the drug being studied in the clinical trial.
@@ -733,7 +745,7 @@ def setup_vanna():
 
     Usage: Identifies the drug under investigation.
 
-    39. drug_description
+    40. drug_description
     Type: TEXT
 
     Description: A description of the drug, including its dosing or other relevant details.
@@ -792,6 +804,26 @@ def setup_vanna():
         # The user-selected columns should ALWAYS appear in the SELECT clause regardless of the question.
         # """)
 
+        # Add training for similarity search using eligibility_criteria_embedding
+        vn.train(documentation="""
+        SIMILARITY SEARCH USING EMBEDDINGS:
+        -----------------------------------
+        - To find trials with eligibility criteria similar to a given text, use the eligibility_criteria_embedding column and cosine similarity.
+        - Example SQL for similarity search:
+          SELECT *, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity
+          FROM clinical_trials
+          WHERE eligibility_criteria_embedding IS NOT NULL
+          ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+          LIMIT 10
+        - The %(embedding)s parameter will be automatically generated from the user's query text and formatted as a vector string.
+        - Use this pattern whenever the user asks for "similar eligibility criteria", "trials like this", "find studies with similar inclusion/exclusion", or other similarity-based queries.
+        - Always use the embedding of the provided text as the query embedding.
+        - Use the <=> operator for cosine distance in PostgreSQL (smaller values = more similar).
+        - Always include a similarity score: (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+        - Similarity scores range from 0 (not similar) to 1 (identical).
+        - Common similarity search columns to include: nct_id, brief_title, eligibility_criteria, conditions, phases, similarity_score
+        """)
+
     else:
         st.write("Using previously trained model...")
         
@@ -845,9 +877,28 @@ def is_sql_valid_cached(sql: str):
     return vn.is_sql_valid(sql=sql)
 
 @st.cache_data(show_spinner="Running SQL query ...")
-def run_sql_cached(sql: str):
+def run_sql_cached(sql: str, question: str = None):
     vn = setup_vanna()
-    return vn.run_sql(sql=sql)
+    # Detect if the SQL is a similarity search using eligibility_criteria_embedding
+    if "eligibility_criteria_embedding" in sql and "%(embedding)s" in sql:
+        # Compute embedding for the question or eligibility text
+        if not question:
+            raise ValueError("Question text required for similarity search embedding")
+        embedding = get_openai_embedding(question)
+        if embedding is None:
+            raise ValueError("Failed to generate embedding for similarity search")
+        
+        # Format embedding as string for PostgreSQL vector type
+        query_vector_str = f"[{','.join(map(str, embedding))}]"
+        
+        # Replace the %(embedding)s placeholder with the actual vector string
+        # This follows the same approach as query_similar_trials.py
+        processed_sql = sql.replace("%(embedding)s", f"'{query_vector_str}'::vector")
+        
+        # Run the processed SQL
+        return vn.run_sql(sql=processed_sql)
+    else:
+        return vn.run_sql(sql=sql)
 
 @st.cache_data(show_spinner="Checking if we should generate a chart ...")
 def should_generate_chart_cached(question, sql, df):
@@ -898,5 +949,69 @@ def generate_summary_cached(question, df):
                 return vn.generate_summary(question=question, df=minimal_df)
             except:
                 return "Summary generation failed due to API limitations. Try a more specific question with a smaller result set."
+
+
+@st.cache_data(show_spinner="Searching for similar trials...")
+def find_similar_trials_cached(query_text: str, limit: int = 10):
+    """
+    Find clinical trials with eligibility criteria similar to the query text.
+    
+    Args:
+        query_text (str): The text to search for similar eligibility criteria
+        limit (int): Maximum number of trials to return
+    
+    Returns:
+        pandas.DataFrame: DataFrame containing similar trials with similarity scores
+    """
+    # Generate the similarity search SQL
+    similarity_sql = f"""
+    SELECT 
+        nct_id,
+        brief_title,
+        eligibility_criteria,
+        conditions,
+        phases,
+        overall_status,
+        start_date,
+        completion_date,
+        enrollment_count,
+        1 - (eligibility_criteria_embedding <=> %(embedding)s) AS similarity_score
+    FROM clinical_trials
+    WHERE eligibility_criteria_embedding IS NOT NULL
+    ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+    LIMIT {limit}
+    """
+    
+    # Use the existing run_sql_cached function which handles embedding generation
+    return run_sql_cached(sql=similarity_sql, question=query_text)
+
+@st.cache_data(show_spinner="Checking embedding availability...")
+def check_embeddings_available():
+    """
+    Check if there are clinical trials with embeddings available in the database.
+    
+    Returns:
+        dict: Dictionary with count of trials with embeddings and total trials
+    """
+    vn = setup_vanna()
+    
+    # Check total trials
+    total_result = vn.run_sql("SELECT COUNT(*) as total_trials FROM clinical_trials")
+    total_trials = total_result.iloc[0]['total_trials'] if not total_result.empty else 0
+    
+    # Check trials with embeddings
+    embedding_result = vn.run_sql("""
+        SELECT COUNT(*) as trials_with_embeddings 
+        FROM clinical_trials 
+        WHERE eligibility_criteria_embedding IS NOT NULL
+    """)
+    trials_with_embeddings = embedding_result.iloc[0]['trials_with_embeddings'] if not embedding_result.empty else 0
+    
+    return {
+        'total_trials': total_trials,
+        'trials_with_embeddings': trials_with_embeddings,
+        'embedding_coverage': trials_with_embeddings / total_trials if total_trials > 0 else 0
+    }
+
 
 

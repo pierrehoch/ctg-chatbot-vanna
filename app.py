@@ -64,7 +64,7 @@ if check_password():
     
     # Define all available columns
     all_columns = [
-        "nct_id", "brief_title", "official_title", "overall_status",
+        "nct_id", "org_study_id", "brief_title", "official_title", "overall_status",
         "start_date", "start_date_type", "primary_completion_date", "primary_completion_date_type",
         "completion_date", "completion_date_type", "study_first_submit_date",
         "last_update_date", "last_update_date_type", "lead_sponsor_name",
@@ -141,7 +141,7 @@ if check_password():
                 assistant_message.write(sql)
                 st.stop()
     
-            df = run_sql_cached(sql=sql)
+            df = run_sql_cached(sql=sql, question=my_question)
     
             if df is not None:
                 st.session_state["df"] = df
