@@ -258,45 +258,47 @@ def setup_vanna():
         - To find the soonest upcoming trials (trials starting after today, ordered by start date):
         
           SQL: 
-          SELECT * FROM clinical_trials 
+          SELECT nct_id, brief_title, conditions, drug_name, phases, start_date, completion_date, overall_status, enrollment_count
+          FROM clinical_trials 
           WHERE start_date >= '{today}' 
-          ORDER BY start_date ASC 
-          LIMIT 10
+          ORDER BY start_date ASC
         
         - To find trials that are currently recruiting and will start soon:
         
           SQL:
-          SELECT * FROM clinical_trials 
+          SELECT nct_id, brief_title, conditions, overall_status, start_date, completion_date, phases
+          FROM clinical_trials 
           WHERE overall_status = 'RECRUITING' 
             AND start_date >= '{today}' 
-          ORDER BY start_date ASC 
-          LIMIT 10
+          ORDER BY start_date ASC
         
         - To find trials that are about to complete soon:
         
           SQL:
-          SELECT * FROM clinical_trials 
+          SELECT nct_id, brief_title, conditions, completion_date, overall_status, phases
+          FROM clinical_trials 
           WHERE completion_date >= '{today}' 
-          ORDER BY completion_date ASC 
-          LIMIT 10
+          ORDER BY completion_date ASC
         
         - To find trials that started in the past month:
         
           SQL:
-          SELECT * FROM clinical_trials 
+          SELECT nct_id, brief_title, conditions, start_date, overall_status, phases
+          FROM clinical_trials 
           WHERE start_date >= '{one_month_ago}' 
             AND start_date < '{today}'
         
         - To find trials that are ongoing as of today:
         
           SQL:
-          SELECT * FROM clinical_trials 
+          SELECT nct_id, brief_title, conditions, start_date, completion_date, overall_status, phases
+          FROM clinical_trials 
           WHERE start_date <= '{today}' 
             AND (completion_date IS NULL OR completion_date >= '{today}')
         
         - Always use the date provided in the question (e.g., "as of 2025-06-23") as the reference for 'today'.
         - Use ORDER BY with ASC for soonest/upcoming, DESC for most recent/past.
-        - Use LIMIT to restrict the number of results for summary or list questions.
+        - Only use LIMIT if the user specifically asks for a limited number of results (e.g., "top 10", "first 5").
         
         Replace {today} with the current date (provided in the prompt).
         Replace {one_month_ago} with the date one month before today.
@@ -304,13 +306,20 @@ def setup_vanna():
         EXAMPLES:
         ---------
         Question: "What are the soonest upcoming trials?"
-        SQL: SELECT * FROM clinical_trials WHERE start_date >= '{today}' ORDER BY start_date ASC LIMIT 10
+        SQL: SELECT nct_id, brief_title, conditions, drug_name, phases, start_date, completion_date, overall_status
+             FROM clinical_trials WHERE start_date >= '{today}' ORDER BY start_date ASC
         
         Question: "Which trials are about to complete?"
-        SQL: SELECT * FROM clinical_trials WHERE completion_date >= '{today}' ORDER BY completion_date ASC LIMIT 10
+        SQL: SELECT nct_id, brief_title, conditions, completion_date, overall_status, phases
+             FROM clinical_trials WHERE completion_date >= '{today}' ORDER BY completion_date ASC
         
         Question: "Show me the most recently started trials"
-        SQL: SELECT * FROM clinical_trials WHERE start_date <= '{today}' ORDER BY start_date DESC LIMIT 10
+        SQL: SELECT nct_id, brief_title, conditions, start_date, overall_status, phases
+             FROM clinical_trials WHERE start_date <= '{today}' ORDER BY start_date DESC
+        
+        Question: "Show me the top 10 upcoming trials"
+        SQL: SELECT nct_id, brief_title, conditions, drug_name, phases, start_date, completion_date, overall_status
+             FROM clinical_trials WHERE start_date >= '{today}' ORDER BY start_date ASC LIMIT 10
         """)
         
 
@@ -353,16 +362,20 @@ def setup_vanna():
         ----------------------------
         
         Question: "Show me Phase 2 trials"
-        SQL: SELECT * FROM clinical_trials WHERE phases @> '["PHASE2"]'
+        SQL: SELECT nct_id, brief_title, phases, conditions, drug_name, start_date, completion_date, overall_status
+             FROM clinical_trials WHERE phases @> '["PHASE2"]'
         
         Question: "Find Phase 1 or Phase 2 trials"  
-        SQL: SELECT * FROM clinical_trials WHERE phases @> '["PHASE1"]' OR phases @> '["PHASE2"]'
+        SQL: SELECT nct_id, brief_title, phases, conditions, drug_name, overall_status
+             FROM clinical_trials WHERE phases @> '["PHASE1"]' OR phases @> '["PHASE2"]'
         
         Question: "Trials in early phases"
-        SQL: SELECT * FROM clinical_trials WHERE phases ?| array['PHASE1', 'PHASE2']
+        SQL: SELECT nct_id, brief_title, phases, conditions, drug_name, start_date, overall_status
+             FROM clinical_trials WHERE phases ?| array['PHASE1', 'PHASE2']
         
         Question: "Phase 3 trials for diabetes"
-        SQL: SELECT * FROM clinical_trials WHERE phases @> '["PHASE3"]' AND LOWER(conditions::text) LIKE '%diabetes%'
+        SQL: SELECT nct_id, brief_title, phases, conditions, drug_name, start_date, completion_date
+             FROM clinical_trials WHERE phases @> '["PHASE3"]' AND LOWER(conditions::text) LIKE '%diabetes%'
         
         Question: "What phases are available?"
         SQL: SELECT DISTINCT jsonb_array_elements_text(phases) as phase FROM clinical_trials WHERE phases IS NOT NULL
@@ -761,67 +774,293 @@ def setup_vanna():
         ---------------------------------------------
         - Never use SELECT * in queries. Always select only the relevant columns for the user's question.
         - Place the most important columns first, in an order that is most useful for the user.
-        - For general trial queries, prefer this column order:
-            nct_id, brief_title, conditions, drug_name, phases, start_date, completion_date, overall_status, enrollment_count
-        - For queries about drugs, use: drug_name, drug_description, nct_id, brief_title, overall_status, start_date, completion_date
-        - For queries about sponsors/collaborators, use: lead_sponsor_name, collaborators, nct_id, brief_title, overall_status, start_date
-        - For queries about eligibility, use: nct_id, brief_title, eligibility_criteria, minimum_age, maximum_age, sex, gender_description
-        - For queries about study population, use: nct_id, brief_title, study_population, std_ages, enrollment_count
-        - Always omit columns that are not relevant to the user's question.
+        - Never include the 'eligibility_criteria_embedding' column in the SELECT statement unless specifically requested.
         - If unsure, default to the general trial column order above.
+        
+        MANDATORY COLUMN INCLUSION RULES:
+        - ALWAYS include 'eligibility_criteria' when the user asks about eligibility, inclusion criteria, exclusion criteria, participant requirements, or trial requirements
+        - ALWAYS include 'drug_name' when the user asks about drugs, medications, treatments, or interventions
+        - ALWAYS include 'phases' when the user asks about trial phases or study phases
+        - ALWAYS include 'conditions' when the user asks about diseases, medical conditions, or indications
+        
         - Example: To show upcoming trials, use:
           SELECT nct_id, brief_title, conditions, drug_name, phases, start_date, completion_date, overall_status, enrollment_count
           FROM clinical_trials
           WHERE start_date >= '{today}'
           ORDER BY start_date ASC
-          LIMIT 10
         - Example: For phase 2 diabetes trials:
           SELECT nct_id, brief_title, phases, conditions, start_date, completion_date, drug_name
           FROM clinical_trials
           WHERE phases @> '["PHASE2"]' AND LOWER(conditions::text) LIKE '%diabetes%'
           ORDER BY start_date ASC
+        - Example: For similarity search with phase filter:
+          SELECT nct_id, brief_title, eligibility_criteria, phases, conditions, drug_name, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+          FROM clinical_trials
+          WHERE eligibility_criteria_embedding IS NOT NULL AND phases @> '["PHASE2"]'
+          ORDER BY eligibility_criteria_embedding <=> %(embedding)s
         - Never include large text fields (like detailed_description) unless specifically requested.
+        - Only use LIMIT if the user specifically asks for a limited number of results (e.g., "top 10", "first 5").
         """)
 
-        # Add training for user-selected columns
-        # vn.train(documentation="""
-        # USER COLUMN SELECTION HANDLING:
-        # ------------------------------
-        # When user-selected columns are provided, ALWAYS include them in the SELECT statement.
-        
-        # Rules for column selection:
-        # 1. If user has selected specific columns, include ALL of them in the SELECT statement
-        # 2. Add other relevant columns based on the question, but user-selected columns take priority
-        # 3. Always include user-selected columns even if they seem irrelevant to the question
-        # 4. Order columns with user-selected ones first, then add other relevant columns
-        # 5. Never exclude user-selected columns from the query
-        
-        # Example:
-        # - User selected columns: ["nct_id", "drug_name", "enrollment_count"]
-        # - Question: "Show me diabetes trials"
-        # - SQL should start with: SELECT nct_id, drug_name, enrollment_count, conditions, ...
-        
-        # The user-selected columns should ALWAYS appear in the SELECT clause regardless of the question.
-        # """)
-
-        # Add training for similarity search using eligibility_criteria_embedding
+        # Add specific training for eligibility criteria questions
         vn.train(documentation="""
-        SIMILARITY SEARCH USING EMBEDDINGS:
-        -----------------------------------
-        - To find trials with eligibility criteria similar to a given text, use the eligibility_criteria_embedding column and cosine similarity.
-        - Example SQL for similarity search:
-          SELECT *, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity
-          FROM clinical_trials
-          WHERE eligibility_criteria_embedding IS NOT NULL
-          ORDER BY eligibility_criteria_embedding <=> %(embedding)s
-          LIMIT 10
-        - The %(embedding)s parameter will be automatically generated from the user's query text and formatted as a vector string.
-        - Use this pattern whenever the user asks for "similar eligibility criteria", "trials like this", "find studies with similar inclusion/exclusion", or other similarity-based queries.
-        - Always use the embedding of the provided text as the query embedding.
-        - Use the <=> operator for cosine distance in PostgreSQL (smaller values = more similar).
-        - Always include a similarity score: (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
-        - Similarity scores range from 0 (not similar) to 1 (identical).
-        - Common similarity search columns to include: nct_id, brief_title, eligibility_criteria, conditions, phases, similarity_score
+        ELIGIBILITY CRITERIA QUERY PATTERNS:
+        ------------------------------------
+        
+        CRITICAL RULE: When users ask about eligibility criteria, inclusion criteria, exclusion criteria, 
+        participant requirements, or trial requirements, ALWAYS include the 'eligibility_criteria' column in the SELECT statement.
+        
+        ELIGIBILITY-RELATED KEYWORDS THAT TRIGGER MANDATORY INCLUSION:
+        - "eligibility", "eligible", "eligibility criteria"
+        - "inclusion criteria", "inclusion requirements", "who can participate"
+        - "exclusion criteria", "exclusion requirements", "who cannot participate"
+        - "participant requirements", "participation criteria"
+        - "trial requirements", "study requirements"
+        - "enrollment criteria", "recruitment criteria"
+        - "patient criteria", "subject criteria"
+        
+        MANDATORY COLUMN SET FOR ELIGIBILITY QUESTIONS:
+        - nct_id, brief_title, eligibility_criteria (ALWAYS REQUIRED)
+        - Additional relevant columns: minimum_age, maximum_age, sex, gender_description, conditions, phases
+        
+        EXAMPLES OF ELIGIBILITY QUESTIONS AND REQUIRED COLUMNS:
+        
+        Question: "What are the eligibility criteria for diabetes trials?"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, conditions, minimum_age, maximum_age, sex
+             FROM clinical_trials 
+             WHERE LOWER(conditions::text) LIKE '%diabetes%' AND eligibility_criteria IS NOT NULL
+        
+        Question: "Show me inclusion criteria for Phase 2 trials"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, phases, minimum_age, maximum_age, sex
+             FROM clinical_trials 
+             WHERE phases @> '["PHASE2"]' AND eligibility_criteria IS NOT NULL
+        
+        Question: "Which trials have specific participant requirements?"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, minimum_age, maximum_age, sex, conditions
+             FROM clinical_trials 
+             WHERE eligibility_criteria IS NOT NULL
+        
+        Question: "Find trials with exclusion criteria for pregnant women"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, sex, minimum_age, maximum_age, conditions
+             FROM clinical_trials 
+             WHERE LOWER(eligibility_criteria) LIKE '%pregnant%' AND eligibility_criteria IS NOT NULL
+        
+        Question: "What are the enrollment requirements for cancer studies?"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, conditions, minimum_age, maximum_age, sex, phases
+             FROM clinical_trials 
+             WHERE LOWER(conditions::text) LIKE '%cancer%' AND eligibility_criteria IS NOT NULL
+        
+        IMPORTANT NOTES:
+        - NEVER omit 'eligibility_criteria' when the question involves eligibility, inclusion, exclusion, or participant requirements
+        - Always include WHERE eligibility_criteria IS NOT NULL to filter out trials without criteria
+        - Include age and sex columns as they are fundamental eligibility parameters
+        - Include conditions and phases when relevant to provide context
+        """)
+
+        # Add comprehensive similarity search examples to training
+        vn.train(documentation="""
+        COMPREHENSIVE SIMILARITY SEARCH EXAMPLES:
+        ----------------------------------------
+
+        CRITICAL LIMIT RULE FOR SIMILARITY SEARCHES:
+        - For all similarity searches using eligibility_criteria_embedding, ALWAYS add 'LIMIT 300' to the SQL query unless the user specifically requests a different limit (e.g., "top 10", "first 5", "limit 1000").
+        - If the user specifies a limit, use that value instead of the default 300.
+        - If no limit is mentioned, always append 'LIMIT 300' at the end of the SQL.
+
+        The following examples show how to construct similarity queries for various user intents.
+        Always include the similarity_score and use the appropriate columns based on the question focus.
+        CRITICAL RULE: ALWAYS include the 'drug_name' column in the SELECT statement for all similarity search queries, regardless of the user's question, unless the user specifically requests to exclude it.
+
+        1. BASIC SIMILARITY QUERIES:
+
+        Question: "Find trials with similar eligibility to diabetes patients over 50"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, conditions, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        Question: "Show me studies with eligibility like: adults with hypertension, no pregnancy"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, conditions, sex, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        2. SIMILARITY + CONDITION FILTERING:
+
+        Question: "Find cancer trials similar to: adults 18-65 with stage 2 cancer"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, conditions, phases, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND LOWER(conditions::text) LIKE '%cancer%'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        Question: "Diabetes studies with eligibility similar to: type 2 diabetes, HbA1c > 7"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, conditions, drug_name, phases, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND LOWER(conditions::text) LIKE '%diabetes%'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        3. SIMILARITY + PHASE FILTERING:
+        
+        Question: "Phase 2 trials with inclusion criteria like: healthy volunteers, 21-45 years"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, phases, minimum_age, maximum_age, healthy_volunteers, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND phases @> '["PHASE2"]'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "Early phase studies similar to: first-in-human, healthy adults"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, phases, healthy_volunteers, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND phases ?| array['PHASE1', 'PHASE2']
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        4. SIMILARITY + STATUS FILTERING:
+        
+        Question: "Recruiting trials with eligibility similar to: pregnant women, 18-35 years"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, overall_status, sex, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND overall_status = 'RECRUITING'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "Active studies with participant criteria like: elderly patients, dementia"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, overall_status, conditions, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND overall_status IN ('RECRUITING', 'ACTIVE_NOT_RECRUITING', 'ENROLLING_BY_INVITATION')
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        5. SIMILARITY + DRUG/INTERVENTION FILTERING:
+        
+        Question: "Drug trials with eligibility like: treatment-naive patients, first-line therapy"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, drug_description, phases, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND drug_name IS NOT NULL
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "Aspirin studies similar to: cardiovascular risk, adults over 40"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, conditions, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND LOWER(drug_name) LIKE '%aspirin%'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        6. SIMILARITY + SPONSOR FILTERING:
+        
+        Question: "Industry trials with eligibility like: post-marketing surveillance"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, lead_sponsor_name, lead_sponsor_class, phases, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND lead_sponsor_class = 'INDUSTRY'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "NIH studies with participant criteria similar to: rare disease patients"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, lead_sponsor_name, lead_sponsor_class, conditions, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND lead_sponsor_class = 'NIH'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        7. SIMILARITY + DATE FILTERING:
+        
+        Question: "Recent trials with eligibility similar to: pediatric patients, under 12"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, start_date, minimum_age, maximum_age, std_ages, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND start_date >= '2023-01-01'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "Upcoming studies with inclusion criteria like: women of childbearing potential"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, start_date, sex, minimum_age, maximum_age, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND start_date >= '{today}'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        8. SIMILARITY + AGE FILTERING:
+        
+        Question: "Trials for seniors similar to: cognitive impairment, over 65"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, minimum_age, maximum_age, std_ages, conditions, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND (minimum_age >= 65 OR std_ages @> '["OLDER_ADULT"]')
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "Pediatric studies with eligibility like: children with autism"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, minimum_age, maximum_age, std_ages, conditions, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND (maximum_age <= 18 OR std_ages @> '["CHILD"]')
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        9. SIMILARITY + ENROLLMENT SIZE FILTERING:
+        
+        Question: "Large studies with eligibility similar to: population-based screening"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, enrollment_count, study_population, phases, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND enrollment_count > 1000
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "Small pilot studies with criteria like: proof of concept, biomarker"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, enrollment_count, phases, study_type, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND enrollment_count <= 50
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+
+        10. COMPLEX MULTI-FILTER SIMILARITY:
+        
+        Question: "Recruiting Phase 3 cancer trials with eligibility similar to: advanced stage, previous treatment"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, phases, conditions, overall_status, drug_name, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND phases @> '["PHASE3"]'
+               AND LOWER(conditions::text) LIKE '%cancer%'
+               AND overall_status = 'RECRUITING'
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        Question: "Industry-sponsored diabetes drug trials similar to: metformin-naive, HbA1c 7-10%"
+        SQL: SELECT nct_id, brief_title, eligibility_criteria, drug_name, conditions, lead_sponsor_class, phases, (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+             FROM clinical_trials 
+             WHERE eligibility_criteria_embedding IS NOT NULL
+               AND LOWER(conditions::text) LIKE '%diabetes%'
+               AND lead_sponsor_class = 'INDUSTRY'
+               AND drug_name IS NOT NULL
+             ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+             LIMIT 300
+        
+        IMPORTANT NOTES FOR ALL SIMILARITY QUERIES:
+        - Always include similarity_score: (1 - (eligibility_criteria_embedding <=> %(embedding)s)) AS similarity_score
+        - Always include WHERE eligibility_criteria_embedding IS NOT NULL
+        - Always ORDER BY eligibility_criteria_embedding <=> %(embedding)s
+        - Always add LIMIT 300 unless the user requests a different limit
+        - Select columns relevant to the question focus
+        - Combine similarity with other filters as needed
+        - Use appropriate date placeholders like {today} when referencing current date
         """)
 
     else:
@@ -867,7 +1106,7 @@ def generate_sql_cached(question: str, selected_columns=None):
     
     if selected_columns and len(selected_columns) > 0:
         columns_str = ", ".join(selected_columns)
-        enhanced_question += f"\n\In addition to what columns you judge to be relevant for answering the question, add those: {columns_str}."
+        enhanced_question += f"\n\nIn addition to what columns you judge to be relevant for answering the question, add those: {columns_str}."
     
     return vn.generate_sql(question=enhanced_question, allow_llm_to_see_data=True)
 
@@ -952,18 +1191,19 @@ def generate_summary_cached(question, df):
 
 
 @st.cache_data(show_spinner="Searching for similar trials...")
-def find_similar_trials_cached(query_text: str, limit: int = 10):
+def find_similar_trials_cached(query_text: str, limit: int = None):
     """
     Find clinical trials with eligibility criteria similar to the query text.
     
     Args:
         query_text (str): The text to search for similar eligibility criteria
-        limit (int): Maximum number of trials to return
+        limit (int): Maximum number of trials to return (optional, no limit if None)
     
     Returns:
         pandas.DataFrame: DataFrame containing similar trials with similarity scores
     """
     # Generate the similarity search SQL
+    limit_clause = f" LIMIT {limit}" if limit is not None else ""
     similarity_sql = f"""
     SELECT 
         nct_id,
@@ -978,8 +1218,7 @@ def find_similar_trials_cached(query_text: str, limit: int = 10):
         1 - (eligibility_criteria_embedding <=> %(embedding)s) AS similarity_score
     FROM clinical_trials
     WHERE eligibility_criteria_embedding IS NOT NULL
-    ORDER BY eligibility_criteria_embedding <=> %(embedding)s
-    LIMIT {limit}
+    ORDER BY eligibility_criteria_embedding <=> %(embedding)s{limit_clause}
     """
     
     # Use the existing run_sql_cached function which handles embedding generation

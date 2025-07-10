@@ -168,6 +168,8 @@ uv.lock
 
 secrets.toml
 
+chroma_db/
+
 load_to_supabase.py
 
 tests/
