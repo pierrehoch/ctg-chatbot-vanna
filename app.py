@@ -7,6 +7,7 @@ except ImportError:
 
 import time
 import streamlit as st
+import io
 from src.vanna_calls import (
     generate_questions_cached,
     generate_sql_cached,
@@ -119,18 +120,23 @@ if check_password():
     #             args=(question,),
     #         )
     
-    my_question = st.session_state.get("my_question", default=None)
-    
+    # Get the question from the session state
+    my_question = st.session_state.get("my_question", None)
+
+    # If there is no question, show the chat input
     if my_question is None:
-        my_question = st.chat_input(
-            "Ask me a question about your data",
-        )
+        user_input = st.chat_input("Ask me a question about your data")
+        if user_input:
+            st.session_state["my_question"] = user_input
+            st.rerun()
     
-    
+    # If there is a question, process it
     if my_question:
-        st.session_state["my_question"] = my_question
+        # Display the user's question
         user_message = st.chat_message("user")
-        user_message.write(f"{my_question}")        # Pass selected columns to SQL generation
+        user_message.write(f"{my_question}")
+        
+        # Pass selected columns to SQL generation
         sql = generate_sql_cached(question=my_question, selected_columns=selected_columns)
 
         if sql:
@@ -340,7 +346,32 @@ if check_password():
                     )
                     
                     assistant_message_table.dataframe(df)
-    
+
+                    # --- Add Excel download button ---
+                    import re
+                    from datetime import datetime
+                    output = io.BytesIO()
+                    df.to_excel(output, index=False, engine='openpyxl')
+                    output.seek(0)
+                    # Generate a short, safe version of the question for the filename
+                    def sanitize_filename(text):
+                        text = re.sub(r'[^\w\s-]', '', text)
+                        text = re.sub(r'\s+', '_', text.strip())
+                        return text
+                    question_short = ""
+                    if my_question:
+                        words = my_question.split()
+                        question_short = "_".join(words[:8])
+                        question_short = sanitize_filename(question_short)
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    file_name = f"clinical_trials_{question_short}_{today_str}.xlsx"
+                    st.download_button(
+                        label="⬇️ Download as Excel",
+                        data=output,
+                        file_name=file_name,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+
                 if False & should_generate_chart_cached(question=my_question, sql=sql, df=df):
     
                     code = generate_plotly_code_cached(question=my_question, sql=sql, df=df)
