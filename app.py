@@ -10,6 +10,7 @@ import streamlit as st
 import io
 from src.vanna_calls import (
     generate_questions_cached,
+    get_random_questions_cached,
     generate_sql_cached,
     run_sql_cached,
     generate_plotly_code_cached,
@@ -106,6 +107,11 @@ if check_password():
             del st.session_state["is_editing_sql"]
     
     
+    # NOTE: The original generate_questions_cached() function has been replaced with 
+    # get_random_questions_cached() which loads questions from typical_questions.txt file
+    # instead of generating them via AI. This provides faster, more consistent suggestions.
+    # 
+    # Original implementation (commented out):
     # assistant_message_suggested = st.chat_message(
     #     "assistant", avatar="🤖"
     # )
@@ -123,12 +129,52 @@ if check_password():
     # Get the question from the session state
     my_question = st.session_state.get("my_question", None)
 
-    # If there is no question, show the chat input
+    # If there is no question, show suggested questions and chat input
     if my_question is None:
+        # Show suggested questions
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("### 💡 Suggested Questions")
+        with col2:
+            if st.button("🔄 Refresh", key="refresh_suggestions", help="Get new suggested questions"):
+                # Clear the cache to get new random questions
+                get_random_questions_cached.clear()
+                st.rerun()
+        
+        suggested_questions = get_random_questions_cached(3)
+        
+        # Display suggested questions as buttons
+        cols = st.columns(len(suggested_questions))
+        for i, question in enumerate(suggested_questions):
+            with cols[i]:
+                if st.button(question, key=f"suggested_{i}", use_container_width=True):
+                    set_question(question)
+
+                    default_chat_input_value = question if question else ""
+                    js = f"""
+                        <script>
+                            function insertText(dummy_var_to_force_repeat_execution) {{
+                                var chatInput = parent.document.querySelector('textarea[data-testid="stChatInputTextArea"]');
+                                var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                                nativeInputValueSetter.call(chatInput, "{default_chat_input_value}");
+                                var event = new Event('input', {{ bubbles: true}});
+                                chatInput.dispatchEvent(event);
+                            }}
+                            insertText({len(st.session_state.get("my_question", ""))});
+                        </script>
+                        """
+                    st.components.v1.html(js)
+                    st.rerun()
+        
+        st.markdown("---")
+        
+        # Show the chat input
         user_input = st.chat_input("Ask me a question about your data")
         if user_input:
             st.session_state["my_question"] = user_input
             st.rerun()
+
+        
     
     # If there is a question, process it
     if my_question:

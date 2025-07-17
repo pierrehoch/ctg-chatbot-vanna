@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import random
 # from vanna.rag import VannaRAG
 from vanna.chromadb import ChromaDB_VectorStore
 from vanna.openai import OpenAI_Chat
@@ -7,6 +8,41 @@ from datetime import date as dt_date, timedelta
 import pandas as pd
 import numpy as np
 from src.utils.get_embedding import get_openai_embedding
+
+
+def get_random_questions(num_questions=3):
+    """
+    Load typical questions from file and return a random selection.
+    
+    Args:
+        num_questions (int): Number of questions to return (default: 3)
+    
+    Returns:
+        list: List of randomly selected questions
+    """
+    try:
+        # Get the path to the typical questions file
+        questions_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'typical_questions.txt')
+        
+        # Read questions from file
+        with open(questions_file, 'r', encoding='utf-8') as f:
+            questions = [line.strip() for line in f.readlines() if line.strip()]
+        
+        # Return random selection
+        if len(questions) >= num_questions:
+            return random.sample(questions, num_questions)
+        else:
+            return questions  # Return all if fewer than requested
+    except FileNotFoundError:
+        # Fallback questions if file doesn't exist
+        return [
+            "What are the soonest upcoming trials?",
+            "Show me Phase 2 trials for diabetes",
+            "Find trials recruiting participants now"
+        ]
+    except Exception as e:
+        st.error(f"Error loading questions: {str(e)}")
+        return []
 
 
 class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
@@ -27,7 +63,7 @@ class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
             self, 
             config={
                 'api_key': st.secrets.get("OPENAI_API_KEY"),
-                'model': 'gpt-4o-mini',  # Use the smaller model
+                'model': 'gpt-4.1-mini',  # Use the smaller model
                 'chunk_size': 500,  # Use smaller chunks
                 'chunk_overlap': 50  # Use less overlap
             }
@@ -1085,6 +1121,14 @@ def setup_vanna():
       
     return vn
 
+@st.cache_data(show_spinner="Loading suggested questions...")
+def get_random_questions_cached(num_questions=3):
+    """
+    Cached version of get_random_questions to avoid reloading file on every call.
+    """
+    return get_random_questions(num_questions)
+
+
 @st.cache_data(show_spinner="Generating sample questions ...")
 def generate_questions_cached():
     vn = setup_vanna()
@@ -1251,6 +1295,30 @@ def check_embeddings_available():
         'trials_with_embeddings': trials_with_embeddings,
         'embedding_coverage': trials_with_embeddings / total_trials if total_trials > 0 else 0
     }
+
+def load_and_sample_questions(file_path, sample_size=3):
+    """
+    Load questions from a text file and return a random sample.
+    
+    Args:
+        file_path (str): Path to the text file containing questions
+        sample_size (int): Number of questions to sample (default: 3)
+    
+    Returns:
+        list: A list of sampled questions
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            # Read all lines and strip whitespace
+            all_questions = [line.strip() for line in file.readlines() if line.strip()]
+        
+        # Sample the questions
+        sampled_questions = random.sample(all_questions, min(sample_size, len(all_questions)))
+        return sampled_questions
+    
+    except Exception as e:
+        st.error(f"Error loading questions: {e}")
+        return []
 
 
 
