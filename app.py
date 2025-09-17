@@ -20,6 +20,7 @@ from src.vanna_calls import (
     is_sql_valid_cached,
     generate_summary_cached
 )
+from src.utils.usage_tracker import track_user_action_simple, Actions, track_error
 
 st.set_page_config(initial_sidebar_state="collapsed", page_title="Elevio CTG Assistant", page_icon=":robot_face:", layout="wide")
 
@@ -52,6 +53,29 @@ def check_password():
         return True
 
 if check_password():
+    # Simple user identification - using a default user or session-based identifier
+    # In a production environment, this would come from authentication headers
+    def get_user_info():
+        # Try to get user from streamlit headers (if available)
+        try:
+            headers = st.context.headers
+            user_email = headers.get("X-Forwarded-Email")
+            if user_email:
+                return {"user_email": user_email}
+        except:
+            pass
+        
+        # Fallback to a default user identifier for this app
+        return {"user_email": "ctg_chatbot_user@eleviogroup.com"}
+    
+    user_info = get_user_info()
+    
+    # Track app start
+    try:
+        track_user_action_simple(user_info["user_email"], Actions.APP_START)
+    except Exception as e:
+        print(f"Warning: Failed to track app start: {e}")
+    
     st.sidebar.title("Output Settings")
     st.sidebar.checkbox("Show SQL", value=True, key="show_sql")
     st.sidebar.checkbox("Show Table", value=True, key="show_table")
@@ -89,6 +113,16 @@ if check_password():
             is_default = column in default_columns
             if st.checkbox(column, value=is_default, key=f"col_{column}"):
                 selected_columns.append(column)
+        
+        # Track column selection when columns are selected
+        if selected_columns:
+            try:
+                # Only track once per session to avoid spam
+                if "columns_tracked" not in st.session_state:
+                    track_user_action_simple(user_info["user_email"], Actions.SELECT_COLUMNS)
+                    st.session_state["columns_tracked"] = True
+            except Exception as e:
+                print(f"Warning: Failed to track column selection: {e}")
     
     
     st.title("Elevio CTG Assistant")
@@ -148,6 +182,12 @@ if check_password():
         for i, question in enumerate(suggested_questions):
             with cols[i]:
                 if st.button(question, key=f"suggested_{i}", use_container_width=True):
+                    # Track suggested question click
+                    try:
+                        track_user_action_simple(user_info["user_email"], Actions.RANDOM_QUESTIONS)
+                    except Exception as e:
+                        print(f"Warning: Failed to track suggested question click: {e}")
+                    
                     set_question(question)
 
                     default_chat_input_value = question if question else ""
@@ -172,6 +212,11 @@ if check_password():
         user_input = st.chat_input("Ask me a question about your data")
         if user_input:
             st.session_state["my_question"] = user_input
+            # Track user query
+            try:
+                track_user_action_simple(user_info["user_email"], Actions.GENERATE_QUESTION)
+            except Exception as e:
+                print(f"Warning: Failed to track user query: {e}")
             st.rerun()
 
         
@@ -184,6 +229,12 @@ if check_password():
         
         # Pass selected columns to SQL generation
         sql = generate_sql_cached(question=my_question, selected_columns=selected_columns)
+        
+        # Track SQL generation
+        try:
+            track_user_action_simple(user_info["user_email"], Actions.SQL_QUERY)
+        except Exception as e:
+            print(f"Warning: Failed to track SQL generation: {e}")
 
         if sql:
             if is_sql_valid_cached(sql=sql):
@@ -331,6 +382,12 @@ if check_password():
                                 
                                 with col1:
                                     if st.button("💾 Save"):
+                                        # Track SQL editing
+                                        try:
+                                            track_user_action_simple(user_info["user_email"], Actions.EDIT_SQL)
+                                        except Exception as e:
+                                            print(f"Warning: Failed to track SQL editing: {e}")
+                                        
                                         st.session_state["editable_sql"] = edited_sql
                                         st.session_state["is_editing_sql"] = False
                                         st.rerun()
@@ -362,8 +419,21 @@ if check_password():
                         # Validate the edited SQL
                         if is_sql_valid_cached(sql=edited_sql):
                             st.session_state["sql_executed"] = True
+                            
+                            # Track SQL execution
+                            try:
+                                track_user_action_simple(user_info["user_email"], Actions.EXECUTE_SQL)
+                            except Exception as e:
+                                print(f"Warning: Failed to track SQL execution: {e}")
+                            
                             df = run_sql_cached(sql=edited_sql, question=my_question)
                         else:
+                            # Track SQL error
+                            try:
+                                track_error(user_info["user_email"], Actions.SQL_ERROR, "Invalid SQL syntax")
+                            except Exception as e:
+                                print(f"Warning: Failed to track SQL error: {e}")
+                            
                             st.error("❌ The modified SQL query is not valid. Please check your syntax.")
                             st.stop()
                     else:
@@ -372,6 +442,12 @@ if check_password():
                         st.stop()
                 else:
                     # SQL editor is disabled, run the query directly
+                    # Track SQL execution
+                    try:
+                        track_user_action_simple(user_info["user_email"], Actions.EXECUTE_SQL)
+                    except Exception as e:
+                        print(f"Warning: Failed to track SQL execution: {e}")
+                    
                     df = run_sql_cached(sql=sql, question=my_question)
             else:
                 assistant_message = st.chat_message(
@@ -415,7 +491,8 @@ if check_password():
                         label="⬇️ Download as Excel",
                         data=output,
                         file_name=file_name,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        on_click=lambda: track_user_action_simple(user_info["user_email"], Actions.DOWNLOAD_RESULTS)
                     )
 
                 if False & should_generate_chart_cached(question=my_question, sql=sql, df=df):
@@ -444,6 +521,12 @@ if check_password():
                                 assistant_message_chart.error("I couldn't generate a chart")
     
                 if st.session_state.get("show_summary", True):
+                    # Track summary generation
+                    try:
+                        track_user_action_simple(user_info["user_email"], Actions.GENERATE_SUMMARY)
+                    except Exception as e:
+                        print(f"Warning: Failed to track summary generation: {e}")
+                    
                     assistant_message_summary = st.chat_message(
                         "assistant",
                         avatar="🤖",
@@ -471,6 +554,12 @@ if check_password():
                             assistant_message_followup.button(question, on_click=set_question, args=(question,))
     
         else:
+            # Track SQL generation error
+            try:
+                track_error(user_info["user_email"], Actions.LLM_ERROR, "Failed to generate SQL")
+            except Exception as e:
+                print(f"Warning: Failed to track SQL generation error: {e}")
+            
             assistant_message_error = st.chat_message(
                 "assistant", avatar="🤖"
             )

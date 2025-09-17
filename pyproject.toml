@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.0.13",
+    "databricks>=0.2",
+    "databricks-sql-connector>=4.1.2",
     "ipykernel>=6.29.5",
     "openai>=1.90.0",
     "openpyxl>=3.1.5",

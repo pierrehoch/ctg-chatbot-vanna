@@ -9,6 +9,7 @@ pysqlite3-binary
 protobuf==3.20.3
 psycopg2-binary>=2.9.10
 openpyxl
+databricks-sql-connector
 
 # vanna #[chromadb,openai]
 # streamlit
