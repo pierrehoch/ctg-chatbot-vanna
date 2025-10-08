@@ -6,6 +6,7 @@ import os
 import streamlit as st
 from datetime import datetime
 from src.utils.db_connection import with_connection
+from zoneinfo import ZoneInfo
 
 def get_env_or_secret(key):
     """Get environment variable from .env first, fallback to st.secrets"""
@@ -36,7 +37,7 @@ def log_user_action(user_email, action, conn=None, uc_catalog=None, uc_schema=No
         uc_schema (str): Schema name (provided by decorator)
     """
     try:
-        timestamp = datetime.now()
+        timestamp = datetime.now(ZoneInfo("Europe/Paris"))
         
         with conn.cursor() as cursor:
             query = f"""
