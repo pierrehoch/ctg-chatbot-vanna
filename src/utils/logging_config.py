@@ -5,7 +5,6 @@ Logging configuration for clinical trials embedding processing
 import logging
 import os
 from datetime import datetime
-import streamlit as st
 
 def setup_logging(log_level=logging.INFO, log_file=None, enable_file_logging=None):
     """
@@ -21,10 +20,15 @@ def setup_logging(log_level=logging.INFO, log_file=None, enable_file_logging=Non
     """
     # Auto-detect environment if not specified
     if enable_file_logging is None:
-        # Check common production environment variables
-        is_production = (
-            st.secrets.get("ENVIRONMENT") == "production"
-        )
+        # Try to check if we're in a Streamlit production environment
+        is_production = False
+        try:
+            import streamlit as st
+            is_production = st.secrets.get("ENVIRONMENT") == "production"
+        except (ImportError, FileNotFoundError, Exception):
+            # Not in Streamlit context or secrets not available - default to development
+            is_production = False
+        
         enable_file_logging = not is_production
     
     log_file_path = None
