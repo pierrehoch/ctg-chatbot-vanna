@@ -1,16 +1,16 @@
 streamlit
-vanna
+vanna[chromadb]==0.7.9
 psycopg[binary]
 python-dotenv
 openai
-vanna[chromadb]
-# chromadb
 pandas
-pysqlite3-binary
+# pysqlite3-binary  # Commented out - has compatibility issues with Python 3.13
 protobuf==3.20.3
 psycopg2-binary>=2.9.10
 openpyxl
 databricks-sql-connector
+numpy<2
+
 
 # vanna #[chromadb,openai]
 # streamlit

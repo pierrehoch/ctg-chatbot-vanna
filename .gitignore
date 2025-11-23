@@ -167,6 +167,7 @@ cython_debug/
 uv.lock
 
 secrets.toml
+.streamlit/secrets.toml
 
 chroma_db/
 
