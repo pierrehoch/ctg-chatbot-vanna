@@ -3,7 +3,7 @@ import streamlit as st
 import os
 import time
 from tqdm import tqdm
-# from .logging_config import get_logger, ProgressTracker
+from src.utils.logging_config import get_logger, ProgressTracker
 
 def get_openai_embedding(text):
     """Compute OpenAI embedding for a given text using the API key from secrets or environment."""
